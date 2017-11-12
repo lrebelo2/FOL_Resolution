@@ -41,8 +41,6 @@ def is_variable(a):
         return True
     if type(a) == list and a.__len__() == 1:
         x = a[0]
-        if len(x) == 0:
-            print x
         if x.find("(") == -1 and not x[0].isupper():
             return True
     return False
@@ -71,7 +69,7 @@ def standarize(s):
         n = ""
         for i in x_args:
             if is_variable(i):
-                i=''.join([w for w in i if not w.isdigit()])
+                i = ''.join([w for w in i if not w.isdigit()])
                 i += str(s.idi)
             n = n + str(i) + ","
         n = n[:-1]
@@ -184,85 +182,155 @@ def has_empty(resolvent):
     return False
 
 
-def resolve(s1, s2):
-    # print "Unify: "+s1.toString()+" with "+s2.toString()
-    subst = unifyR(s1.literals, s2.literals, {})
-    # print subst
-    res = set()
-    literals = list()
-    c1 = deepcopy(s1.literals)
-    l1 = list()
-    c2 = deepcopy(s2.literals)
-    l2 = list()
-    # applying substitution to sentences
-    if subst is not None:
-        if len(subst) != 0:
-            for x in c1:
-                d = split_compound([x])
-                x_args = d['arg']
-                x_op = d['function']
-                s = ""
-                for i in x_args:
-                    if subst.__contains__(i):
-                        i = subst[i]
-                    s = s + str(i) + ","
-                s = s[:-1]
-                if x[0].find("~") != -1:
+def has_empty2(resolvents):
+    for i in resolvents:
+        if i.literals[0] == "":
+            return True
+    return False
 
-                    s = str("~" + x_op + "(") + s + ")"
-                else:
-                    s = str(x_op + "(") + s + ")"
 
-                l1 += Sentence(s).literals
-            for x in c2:
-                d = split_compound([x])
-                x_args = d['arg']
-                x_op = d['function']
-                s = ""
-                for i in x_args:
-                    if subst.__contains__(i):
-                        i = subst[i]
-                    s = s + str(i) + ","
-                s = s[:-1]
-                if x[0] == "~":
-                    s = str("~" + x_op + "(") + s + ")"
-                else:
-                    s = str(x_op + "(") + s + ")"
-
-                l2 += Sentence(s).literals
-            literals = l1 + l2
-    else:
-        del l1, l2, c1, c2
-        return res
-
-    del l1, l2
-
+def will_not_resolve(s1, s2):
+    literals = s1.literals + s2.literals
+    n1 = s1.literals.__len__()
+    n2 = s2.literals.__len__()
+    setl = set()
     for x in combinations(literals, 2):
         c1 = deepcopy(x[0])
         c2 = deepcopy(x[1])
-        if c1 != c2:
-            c1 = c1.replace("~", "")
-            c2 = c2.replace("~", "")
-            if c1 == c2:
-                if literals.__contains__(x[0]):
-                    literals.remove(x[0])
-                if literals.__contains__(x[1]):
-                    literals.remove(x[1])
-            del c1, c2
-        else:
-            if literals.__contains__(x[0]):
-                literals.remove(x[0])
-            del c1, c2
-    sentence=Sentence(" | ".join(literals))
-    standarize(sentence)
-    res.add(sentence)
-    del literals
-    return res
+        c1 = c1.replace("~", "")
+        c2 = c2.replace("~", "")
+        d = split_compound([c1])
+        x_op = d['function']
+        d = split_compound([c2])
+        y_op = d['function']
+        if x_op == y_op:
+            return False
+    return True
+
+
+def test(a, b):
+    if a == b:
+        return False
+    if a[0] == "~" and b[0] != "~" and a[1:] == b:
+        return True
+    if b[0] == "~" and a[0] != "~" and b[1:] == a:
+        return True
+    return False
+
+
+def all_variables(s):
+    for i in s.literals:
+        d = split_compound([i])
+        x_args = d['arg']
+        for j in x_args:
+            if not is_variable(j):
+                return False
+    return True
+
+
+def pl_resolve(ci, cj):
+    clauses = []
+    c1 = deepcopy(ci)
+    c2 = deepcopy(cj)
+    test1=all_variables(c1)
+    test2=all_variables(c2)
+    if not test1 and not test2:
+        for di in c1.literals:
+            for dj in c2.literals:
+                if test(di, dj):
+
+                    c1.literals.remove(di)
+                    c2.literals.remove(dj)
+                    d = set(c1.literals + c2.literals)
+                    clauses.append(Sentence(" | ".join(list(d))))
+    return set(clauses)
+
+
+def substitute(s1, s2, subst):
+    c1 = s1.literals
+    c2 = s2.literals
+    if len(subst) != 0:
+        ns = ""
+        for x in c1:
+            d = split_compound([x])
+            x_args = d['arg']
+            x_op = d['function']
+            s = ""
+            for i in x_args:
+                if subst.__contains__(i):
+                    i = subst[i]
+                s = s + str(i) + ","
+            s = s[:-1]
+            if x[0].find("~") != -1:
+
+                s = str("~" + x_op + "(") + s + ")"
+            else:
+                s = str(x_op + "(") + s + ")"
+            ns += s + " | "
+        ns = ns[:-3]
+        s1.og = ns
+        s1.literals = ns.replace(" ", "").split("|")
+        ns = ""
+        for x in c2:
+            d = split_compound([x])
+            x_args = d['arg']
+            x_op = d['function']
+            s = ""
+            for i in x_args:
+                if subst.__contains__(i):
+                    i = subst[i]
+                s = s + str(i) + ","
+            s = s[:-1]
+            if x[0] == "~":
+                s = str("~" + x_op + "(") + s + ")"
+            else:
+                s = str(x_op + "(") + s + ")"
+            ns += s + " | "
+        ns = ns[:-3]
+        s2.og = ns
+        s2.literals = ns.replace(" ", "").split("|")
+
+
+def resolve(s1, s2):
+    subst = unifyR(s1.literals, s2.literals, {})
+    # applying substitution to sentences
+    if subst is not None:
+        substitute(s1, s2, subst)
+    # resolving
+    return pl_resolve(s1, s2)
+    # f = False
+    # for x in combinations(literals, 2):
+    #     c1 = deepcopy(x[0])
+    #     c2 = deepcopy(x[1])
+    #     if c1 != c2:
+    #         c1 = c1.replace("~", "")
+    #         c2 = c2.replace("~", "")
+    #         if c1 == c2:
+    #             if literals.__contains__(x[0]):
+    #                 literals.remove(x[0])
+    #                 f = True
+    #             if literals.__contains__(x[1]):
+    #                 literals.remove(x[1])
+    #                 f = True
+    #         del c1, c2
+    #     else:
+    #         if literals.__contains__(x[0]):
+    #             literals.remove(x[0])
+    #             f = True
+    #         del c1, c2
+    # if f:
+    #     sentence = Sentence(" | ".join(literals))
+    #     # standarize(sentence)
+    #     res.add(sentence)
+    #     del literals
+    #     return res
+    # else:
+    #     del literals
+    #     return set()
 
 
 def comb(KB):
     q = LifoQueue()
-    c = list(KB)
     for x in combinations(KB, 2):
         q.put_nowait(x)
     return q
@@ -272,7 +340,57 @@ def comb_new(KB, new, q):
     if len(new) != 0:
         for i in new:
             for j in KB:
-                q.put_nowait([j, i])
+                q.put_nowait([i, j])
+
+
+def in_custom(c,KB):
+    for i in KB:
+        if i.og == c.og:
+            return True
+    return False
+
+def is_subset(a,b):
+    c=0
+    n=len(a)
+    for i in a:
+        for j in b:
+            if j.og==i.og:
+                c+=1
+    if c>=n:
+        return True
+    return False
+
+def resolution2(KB, alpha):
+    new = set()
+    KB.add(alpha)
+    iteration = 0
+    max = KB.__len__()
+    # KB = list(KB)
+    while iteration < max:
+        iteration += 1
+        # n = len(KB)
+        # print n
+        # pairs = [(KB[i], KB[j]) for i in range(n) for j in range(i + 1, n)]
+        # SORT PAIRS? O(m+w_n_r)?
+        comb=combinations(KB,2)
+        for x in comb:
+            # x = q.get()
+            ci = x[0]
+            cj = x[1]
+            resolvents = resolve(ci, cj)
+            if len(resolvents) != 0:
+                if has_empty2(resolvents):
+                    return True
+                for i in resolvents:
+                    if not in_custom(i, new):
+                        new.add(i)
+        if is_subset(new, KB):
+            return False
+        for c in new:
+            if not in_custom(c, KB):
+                KB.add(c)
+
+    return False
 
 
 def resolution(KB, alpha):
@@ -281,9 +399,12 @@ def resolution(KB, alpha):
     i = 0
     q = comb(KB)
     comb_new(KB, [alpha], q)
-    while i <= max:
+    KB.add(alpha)
+    while i < max:
         i += 1
-        q = comb(KB)
+        # if i>1:
+        #     q = comb(KB)
+        print i, q.qsize()
         while not q.empty():
             x = q.get()
             # print x[0].toString()," with ",x[1].toString()
@@ -292,36 +413,38 @@ def resolution(KB, alpha):
             else:
                 resolvents = set()
             if len(resolvents) != 0:
-                if has_empty(list(resolvents)[0].literals):
+                # print list(resolvents)[0].literals
+                if has_empty2(resolvents):
                     del KB
                     return True
-            new = new.union(resolvents)
-        if new.issubset(KB):
+                comb_new(KB, resolvents, q)
+                # print q.qsize()
+                new.add(list(resolvents)[0])
+        if new.issubset(KB) and len(new) != 0:
             del KB
             return False
-        # comb_new(KB, new, q)
-        KB = KB.union(new)
+        comb_new(KB, new, q)
+        for x in new:
+            KB.add(x)
+
     del KB
     return False
 
-
-input_param = readfile("input4.txt")
+# RESULT SO FAR: IF answer should be False, im always right,
+# if answer should be True, seems random
+input_param = readfile("input1.txt")
 queries, nQuery, nSentences = input_param["Q"], input_param["Nq"], input_param["Ns"]
 file_output = open("output.txt", 'w')
-
-inference = resolution(input_param["S"], Sentence("~Criminal(West)"))
-print inference
-
-# while not queries.empty():
-#     KBs = deepcopy(input_param['S'])
-#     inference = resolution(KBs, queries.get())
-#     print inference
-#     if inference:
-#         file_output.write("TRUE")
-#     else:
-#         file_output.write("FALSE")
-#     file_output.write("\n")
-# file_output.close()
+while not queries.empty():
+    KBs = deepcopy(input_param['S'])
+    inference = resolution2(KBs, queries.get())
+    print inference
+    if inference:
+        file_output.write("TRUE")
+    else:
+        file_output.write("FALSE")
+    file_output.write("\n")
+file_output.close()
 
 # KB = set()
 # KB.add("a")
