@@ -1,5 +1,5 @@
 import re
-from Queue import Queue, LifoQueue
+from Queue import Queue
 from copy import deepcopy
 from itertools import combinations
 
@@ -16,10 +16,13 @@ class Sentence:
     def toString(self):
         return " | ".join(self.literals)
 
-    def equals(self, s):
+    def __equals__(self, s):
         if self.toString() == s.toString():
             return True
         return False
+
+    def __hash__(self):
+        return self.og.__hash__()
 
 
 def split_compound(x):
@@ -117,12 +120,14 @@ def readfile(filename):
 
 
 def unify_var(var, x, tetha):
-    x = x[0]
+    if type(x) == list:
+        x = x[0]
+    if type(var) == list:
+        var = var[0]
     if tetha.__contains__(var):
         return unify(tetha[var], x, tetha)
     if tetha.__contains__(x):
         return unify(var, tetha[x], tetha)
-    # elif occur_check(var,x) then return None
     else:
         tetha[var] = x
         return tetha
@@ -135,7 +140,11 @@ def unifyR(x, y, tetha):
     for a in combinations(c, 2):
         u = unify([a[0]], [a[1]], tetha)
         if u is not None:
-            if len(u) != 0:
+            f = False
+            for i in u:
+                if t.has_key(i):
+                    f = True
+            if len(u) != 0 and not f:
                 z = t.copy()  # start with x's keys and values
                 z.update(u)  # modifies z with y's keys and values & returns None
                 t = z
@@ -156,9 +165,9 @@ def unify(x, y, tetha):
     elif x == y:
         return tetha
     elif is_variable(x):
-        return unify_var(x[0], y, tetha)
+        return unify_var(x, y, tetha)
     elif is_variable(y):
-        return unify_var(y[0], x, tetha)
+        return unify_var(y, x, tetha)
     elif is_compound(x) and is_compound(y):
         d = split_compound(x)
         x_args = d['arg']
@@ -166,7 +175,16 @@ def unify(x, y, tetha):
         d = split_compound(y)
         y_args = d['arg']
         y_op = d['function']
-        return unify(x_args, y_args, unify(x_op, y_op, tetha))
+        if x[0][0] == "~":
+            x_neg = "~"
+        else:
+            x_neg = ""
+        if y[0][0] == "~":
+            y_neg = "~"
+        else:
+            y_neg = ""
+        if x_op == y_op and x_neg != y_neg:
+            return unify(x_args, y_args, unify(x_op, y_op, tetha))
     elif is_list(x) and is_list(y):
         x_first, x_rest = x[:1], x[1:]
         y_first, y_rest = y[:1], y[1:]
@@ -175,46 +193,31 @@ def unify(x, y, tetha):
         return None
 
 
-def has_empty(resolvent):
-    for i in resolvent:
-        if i == "":
-            return True
-    return False
-
-
-def has_empty2(resolvents):
+def has_empty(resolvents):
     for i in resolvents:
-        if i.literals[0] == "":
+        if len(i.literals) == 0:
+            return True
+        elif i.literals[0] == "":
             return True
     return False
-
-
-def will_not_resolve(s1, s2):
-    literals = s1.literals + s2.literals
-    n1 = s1.literals.__len__()
-    n2 = s2.literals.__len__()
-    setl = set()
-    for x in combinations(literals, 2):
-        c1 = deepcopy(x[0])
-        c2 = deepcopy(x[1])
-        c1 = c1.replace("~", "")
-        c2 = c2.replace("~", "")
-        d = split_compound([c1])
-        x_op = d['function']
-        d = split_compound([c2])
-        y_op = d['function']
-        if x_op == y_op:
-            return False
-    return True
 
 
 def test(a, b):
     if a == b:
         return False
+    a = ''.join([w for w in a if not w.isdigit()])
+    b = ''.join([w for w in b if not w.isdigit()])
     if a[0] == "~" and b[0] != "~" and a[1:] == b:
         return True
-    if b[0] == "~" and a[0] != "~" and b[1:] == a:
+    elif b[0] == "~" and a[0] != "~" and b[1:] == a:
         return True
+    return False
+
+
+def in_custom(c, KB):
+    for i in KB:
+        if i.og == c.og:
+            return True
     return False
 
 
@@ -232,13 +235,13 @@ def pl_resolve(ci, cj):
     clauses = []
     c1 = deepcopy(ci)
     c2 = deepcopy(cj)
-    test1=all_variables(c1)
-    test2=all_variables(c2)
-    if not test1 and not test2:
+    test1 = all_variables(c1)
+    test2 = all_variables(c2)
+    aux = not (test1 and test2)
+    if aux:
         for di in c1.literals:
             for dj in c2.literals:
                 if test(di, dj):
-
                     c1.literals.remove(di)
                     c2.literals.remove(dj)
                     d = set(c1.literals + c2.literals)
@@ -247,10 +250,13 @@ def pl_resolve(ci, cj):
 
 
 def substitute(s1, s2, subst):
+    og1 = deepcopy(s1)
+    og2 = deepcopy(s2)
     c1 = s1.literals
+    f = False
     c2 = s2.literals
     if len(subst) != 0:
-        ns = ""
+        ns1 = ""
         for x in c1:
             d = split_compound([x])
             x_args = d['arg']
@@ -258,7 +264,10 @@ def substitute(s1, s2, subst):
             s = ""
             for i in x_args:
                 if subst.__contains__(i):
-                    i = subst[i]
+                    if subst[i] not in x_args:
+                        i = subst[i]
+                    else:
+                        f = True
                 s = s + str(i) + ","
             s = s[:-1]
             if x[0].find("~") != -1:
@@ -266,11 +275,10 @@ def substitute(s1, s2, subst):
                 s = str("~" + x_op + "(") + s + ")"
             else:
                 s = str(x_op + "(") + s + ")"
-            ns += s + " | "
-        ns = ns[:-3]
-        s1.og = ns
-        s1.literals = ns.replace(" ", "").split("|")
-        ns = ""
+            ns1 += s + " | "
+        ns1 = ns1[:-3]
+
+        ns2 = ""
         for x in c2:
             d = split_compound([x])
             x_args = d['arg']
@@ -278,166 +286,77 @@ def substitute(s1, s2, subst):
             s = ""
             for i in x_args:
                 if subst.__contains__(i):
-                    i = subst[i]
+                    if subst[i] not in x_args:
+                        i = subst[i]
+                    else:
+                        f = True
                 s = s + str(i) + ","
             s = s[:-1]
             if x[0] == "~":
                 s = str("~" + x_op + "(") + s + ")"
             else:
                 s = str(x_op + "(") + s + ")"
-            ns += s + " | "
-        ns = ns[:-3]
-        s2.og = ns
-        s2.literals = ns.replace(" ", "").split("|")
+            ns2 += s + " | "
+        ns2 = ns2[:-3]
+        return [Sentence(ns1), Sentence(ns2)]
 
 
-def resolve(s1, s2):
+def resolve(s1, s2, support):
+    if not (in_custom(s1, support) or in_custom(s2, support)):
+        return set()
     subst = unifyR(s1.literals, s2.literals, {})
     # applying substitution to sentences
     if subst is not None:
-        substitute(s1, s2, subst)
+        s = substitute(s1, s2, subst)
+        s1 = s[0]
+        s2 = s[1]
     # resolving
     return pl_resolve(s1, s2)
-    # f = False
-    # for x in combinations(literals, 2):
-    #     c1 = deepcopy(x[0])
-    #     c2 = deepcopy(x[1])
-    #     if c1 != c2:
-    #         c1 = c1.replace("~", "")
-    #         c2 = c2.replace("~", "")
-    #         if c1 == c2:
-    #             if literals.__contains__(x[0]):
-    #                 literals.remove(x[0])
-    #                 f = True
-    #             if literals.__contains__(x[1]):
-    #                 literals.remove(x[1])
-    #                 f = True
-    #         del c1, c2
-    #     else:
-    #         if literals.__contains__(x[0]):
-    #             literals.remove(x[0])
-    #             f = True
-    #         del c1, c2
-    # if f:
-    #     sentence = Sentence(" | ".join(literals))
-    #     # standarize(sentence)
-    #     res.add(sentence)
-    #     del literals
-    #     return res
-    # else:
-    #     del literals
-    #     return set()
-
-
-def comb(KB):
-    q = LifoQueue()
-    for x in combinations(KB, 2):
-        q.put_nowait(x)
-    return q
-
-
-def comb_new(KB, new, q):
-    if len(new) != 0:
-        for i in new:
-            for j in KB:
-                q.put_nowait([i, j])
-
-
-def in_custom(c,KB):
-    for i in KB:
-        if i.og == c.og:
-            return True
-    return False
-
-def is_subset(a,b):
-    c=0
-    n=len(a)
-    for i in a:
-        for j in b:
-            if j.og==i.og:
-                c+=1
-    if c>=n:
-        return True
-    return False
-
-def resolution2(KB, alpha):
-    new = set()
-    KB.add(alpha)
-    iteration = 0
-    max = KB.__len__()
-    # KB = list(KB)
-    while iteration < max:
-        iteration += 1
-        # n = len(KB)
-        # print n
-        # pairs = [(KB[i], KB[j]) for i in range(n) for j in range(i + 1, n)]
-        # SORT PAIRS? O(m+w_n_r)?
-        comb=combinations(KB,2)
-        for x in comb:
-            # x = q.get()
-            ci = x[0]
-            cj = x[1]
-            resolvents = resolve(ci, cj)
-            if len(resolvents) != 0:
-                if has_empty2(resolvents):
-                    return True
-                for i in resolvents:
-                    if not in_custom(i, new):
-                        new.add(i)
-        if is_subset(new, KB):
-            return False
-        for c in new:
-            if not in_custom(c, KB):
-                KB.add(c)
-
-    return False
 
 
 def resolution(KB, alpha):
     new = set()
-    max = KB.__len__() * KB.__len__()
-    i = 0
-    q = comb(KB)
-    comb_new(KB, [alpha], q)
-    KB.add(alpha)
-    while i < max:
-        i += 1
-        # if i>1:
-        #     q = comb(KB)
-        print i, q.qsize()
-        while not q.empty():
-            x = q.get()
-            # print x[0].toString()," with ",x[1].toString()
-            if not x[0].equals(x[1]):
-                resolvents = resolve(x[0], x[1])
-            else:
-                resolvents = set()
+    support = set()
+    support.add(alpha)
+    iteration = 0
+    max = KB.__len__() * 10
+    while iteration < max:
+        iteration += 1
+        if iteration == 1:
+            KB.add(alpha)
+        for x in combinations(KB, 2):
+            # x = q.get()
+            ci = x[0]
+            cj = x[1]
+            resolvents = resolve(ci, cj, support)
             if len(resolvents) != 0:
-                # print list(resolvents)[0].literals
-                if has_empty2(resolvents):
-                    del KB
+                if has_empty(resolvents):
                     return True
-                comb_new(KB, resolvents, q)
-                # print q.qsize()
-                new.add(list(resolvents)[0])
-        if new.issubset(KB) and len(new) != 0:
-            del KB
+                for i in resolvents:
+                    if not in_custom(i, support):
+                        support.add(i)
+                    if not in_custom(i, new):
+                        new.add(i)
+        n = 0
+        if len(new) != 0:
+            for c in new:
+                if not in_custom(c, KB):
+                    n += 1
+                    KB.add(c)
+            if n == 0:
+                return False
+        else:
             return False
-        comb_new(KB, new, q)
-        for x in new:
-            KB.add(x)
-
-    del KB
     return False
 
-# RESULT SO FAR: IF answer should be False, im always right,
-# if answer should be True, seems random
+
 input_param = readfile("input1.txt")
 queries, nQuery, nSentences = input_param["Q"], input_param["Nq"], input_param["Ns"]
 file_output = open("output.txt", 'w')
+
 while not queries.empty():
     KBs = deepcopy(input_param['S'])
-    inference = resolution2(KBs, queries.get())
+    inference = resolution(KBs, queries.get())
     print inference
     if inference:
         file_output.write("TRUE")
@@ -445,6 +364,15 @@ while not queries.empty():
         file_output.write("FALSE")
     file_output.write("\n")
 file_output.close()
+
+
+# Testing drivers
+# KBs = deepcopy(input_param['S'])
+# inference = resolution2(KBs, Sentence("~H(John)"))
+# print inference
+
+# r=resolve(Sentence("~Mother(x8,y8) | Parent(x8,y8)"),Sentence("~Parent(Liz,y7) | ~Ancestor(y7,Billy)"),set())
+# print 1
 
 # KB = set()
 # KB.add("a")
@@ -455,9 +383,9 @@ file_output.close()
 #
 # comb_new(KB,new,q)
 # print q.get()
-
-# x = Sentence("~Criminal(West)").literals
-# y = Sentence("~Hostile(z) | Criminal(x)").literals
+#
+# x = Sentence("C(x,y,z)").literals
+# y = Sentence("C(y,Joe,Bob)").literals
 # print unifyR(x, y, {})
 # print x
 # print y
@@ -466,7 +394,7 @@ file_output.close()
 # p.add(Sentence("Knows(John,x)"))
 # p.add(Sentence("Knows(y,Amy)"))
 #
-# d = split_compound(["A(xy,cuzinho)"])
+# d = split_compound(["A(xy,xyz)"])
 # x_args = d['arg']
 # x_op = d['function']
 # print x_op,x_args
