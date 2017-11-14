@@ -205,8 +205,6 @@ def has_empty(resolvents):
 def test(a, b):
     if a == b:
         return False
-    a = ''.join([w for w in a if not w.isdigit()])
-    b = ''.join([w for w in b if not w.isdigit()])
     if a[0] == "~" and b[0] != "~" and a[1:] == b:
         return True
     elif b[0] == "~" and a[0] != "~" and b[1:] == a:
