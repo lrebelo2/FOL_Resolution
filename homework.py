@@ -221,32 +221,18 @@ def in_custom(c, KB):
     return False
 
 
-def all_variables(s):
-    for i in s.literals:
-        d = split_compound([i])
-        x_args = d['arg']
-        for j in x_args:
-            if not is_variable(j):
-                return False
-    return True
-
-
 def pl_resolve(ci, cj):
     clauses = []
     c1 = deepcopy(ci)
     c2 = deepcopy(cj)
-    test1 = all_variables(c1)
-    test2 = all_variables(c2)
-    aux = not (test1 and test2)
-    if aux:
-        for di in c1.literals:
-            for dj in c2.literals:
-                if test(di, dj):
-                    c1.literals.remove(di)
-                    c2.literals.remove(dj)
-                    d = set(c1.literals + c2.literals)
-                    clauses.append(Sentence(" | ".join(list(d))))
-    return set(clauses)
+    for di in c1.literals:
+        for dj in c2.literals:
+            if test(di, dj):
+                c1.literals.remove(di)
+                c2.literals.remove(dj)
+                d = set(c1.literals + c2.literals)
+                clauses.append(Sentence(" | ".join(list(d))))
+return set(clauses)
 
 
 def substitute(s1, s2, subst):
@@ -350,7 +336,7 @@ def resolution(KB, alpha):
     return False
 
 
-input_param = readfile("input1.txt")
+input_param = readfile("input.txt")
 queries, nQuery, nSentences = input_param["Q"], input_param["Nq"], input_param["Ns"]
 file_output = open("output.txt", 'w')
 
